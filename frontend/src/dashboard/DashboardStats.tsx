@@ -20,17 +20,25 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { alpha, useTheme, type Theme } from "@mui/material/styles";
 import { LineChart } from "@mui/x-charts/LineChart";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { Repository, TrendPoint } from "../api/client";
 import { useStatCardsPreferences } from "../theme/StatCardsPreferencesContext";
+import { buildYearlyTrendsFromRepos } from "./buildTrendsFromRepos";
 import {
   describeLatestMonthTrend,
-  monthLabelsFromPoints,
+  describeLatestYearTrend,
+  periodLabelsFromPoints,
   sparkSeries,
   type TrendDirection,
   type TrendMetricKey,
 } from "./statTrendUtils";
 import { useAnimatedCount } from "./useAnimatedCount";
+
+type TrendGranularity = "month" | "year";
+
+function usesYearlyTrend(key: TrendMetricKey): boolean {
+  return key === "repos" || key === "stars";
+}
 
 type DashboardStatsProps = {
   repositories: Repository[];
@@ -239,14 +247,22 @@ function StatCard({
   value,
   paletteKey,
   trendKey,
-  trendPoints,
+  chartPoints,
+  granularity,
   trendsLoading,
-}: StatDef & { trendPoints: TrendPoint[]; trendsLoading: boolean }) {
+}: StatDef & {
+  chartPoints: TrendPoint[];
+  granularity: TrendGranularity;
+  trendsLoading: boolean;
+}) {
   const theme = useTheme();
   const color = theme.palette[paletteKey].main;
-  const series = sparkSeries(trendPoints, trendKey);
-  const monthLabels = monthLabelsFromPoints(trendPoints);
-  const trendInsight = describeLatestMonthTrend(series, monthLabels, statTrendItemLabel(trendKey));
+  const series = sparkSeries(chartPoints, trendKey);
+  const periodLabels = periodLabelsFromPoints(chartPoints, granularity);
+  const trendInsight =
+    granularity === "year"
+      ? describeLatestYearTrend(series, periodLabels, statTrendItemLabel(trendKey))
+      : describeLatestMonthTrend(series, periodLabels, statTrendItemLabel(trendKey));
 
   return (
     <Card variant="outlined" sx={t => statCardSx(t, paletteKey)}>
@@ -272,7 +288,7 @@ function StatCard({
           ) : null}
         </Stack>
 
-        <StatTrendChart data={series} monthLabels={monthLabels} color={color} loading={trendsLoading} />
+        <StatTrendChart data={series} monthLabels={periodLabels} color={color} loading={trendsLoading} />
       </CardContent>
     </Card>
   );
@@ -290,6 +306,10 @@ export function DashboardStats({
   trendsWarning = null,
 }: DashboardStatsProps) {
   const { showStats, toggleShowStats } = useStatCardsPreferences();
+  const yearlyTrendPoints = useMemo(
+    () => buildYearlyTrendsFromRepos(repositories),
+    [repositories],
+  );
 
   const totalStars = repositories.reduce((sum, r) => sum + r.stargazers_count, 0);
   const totalIssues = repositories.reduce((sum, r) => sum + r.open_issues_count, 0);
@@ -363,8 +383,9 @@ export function DashboardStats({
             <Grid key={stat.label} size={{ xs: 12, sm: 6, md: 3 }}>
               <StatCard
                 {...stat}
-                trendPoints={trendPoints}
-                trendsLoading={trendsLoading}
+                chartPoints={usesYearlyTrend(stat.trendKey) ? yearlyTrendPoints : trendPoints}
+                granularity={usesYearlyTrend(stat.trendKey) ? "year" : "month"}
+                trendsLoading={usesYearlyTrend(stat.trendKey) ? false : trendsLoading}
               />
             </Grid>
           ))}

@@ -2,6 +2,25 @@ import type { Repository, TrendPoint } from "../api/client";
 
 const TREND_MONTHS = 6;
 
+function earliestRepoYear(repositories: Repository[]): number {
+  const currentYear = new Date().getUTCFullYear();
+  let min = currentYear;
+  let found = false;
+
+  for (const repo of repositories) {
+    if (!repo.created_at) continue;
+    const created = new Date(repo.created_at);
+    if (Number.isNaN(created.getTime())) continue;
+    const year = created.getUTCFullYear();
+    if (!found || year < min) {
+      min = year;
+      found = true;
+    }
+  }
+
+  return found ? min : currentYear;
+}
+
 /** Client-side repos/stars buckets when the trends API is unavailable. */
 export function buildTrendsFromRepos(repositories: Repository[]): TrendPoint[] {
   const now = new Date();
@@ -18,6 +37,30 @@ export function buildTrendsFromRepos(repositories: Repository[]): TrendPoint[] {
     const created = new Date(repo.created_at);
     if (Number.isNaN(created.getTime())) continue;
     const key = `${created.getUTCFullYear()}-${String(created.getUTCMonth() + 1).padStart(2, "0")}`;
+    const bucket = buckets.find(b => b.month === key);
+    if (!bucket) continue;
+    bucket.repos += 1;
+    bucket.stars += repo.stargazers_count ?? 0;
+  }
+
+  return buckets;
+}
+
+/** Yearly repos/stars from first repo creation through today (period key in `month` is `YYYY`). */
+export function buildYearlyTrendsFromRepos(repositories: Repository[]): TrendPoint[] {
+  const currentYear = new Date().getUTCFullYear();
+  const startYear = earliestRepoYear(repositories);
+  const buckets: TrendPoint[] = [];
+
+  for (let year = startYear; year <= currentYear; year++) {
+    buckets.push({ month: String(year), repos: 0, stars: 0, open_prs: 0, open_issues: 0 });
+  }
+
+  for (const repo of repositories) {
+    if (!repo.created_at) continue;
+    const created = new Date(repo.created_at);
+    if (Number.isNaN(created.getTime())) continue;
+    const key = String(created.getUTCFullYear());
     const bucket = buckets.find(b => b.month === key);
     if (!bucket) continue;
     bucket.repos += 1;

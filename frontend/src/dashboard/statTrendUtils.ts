@@ -18,7 +18,6 @@ export type MonthTrendInsight = {
 };
 
 export function sparkSeries(points: TrendPoint[], key: TrendMetricKey): number[] {
-  if (points.length === 0) return [0, 0, 0, 0, 0, 0];
   return points.map(p => p[key]);
 }
 
@@ -37,6 +36,14 @@ export function monthLabelsFromPoints(points: TrendPoint[]): string[] {
   return points.map(p => formatMonthShort(p.month));
 }
 
+export function periodLabelsFromPoints(
+  points: TrendPoint[],
+  granularity: "month" | "year",
+): string[] {
+  if (granularity === "year") return points.map(p => p.month);
+  return points.map(p => formatMonthShort(p.month));
+}
+
 function trendDirection(delta: number): TrendDirection {
   if (delta > 0) return "up";
   if (delta < 0) return "down";
@@ -47,19 +54,20 @@ function formatPct(pct: number): string {
   return `${pct >= 0 ? "+" : ""}${pct}%`;
 }
 
-/** Compare the last two months — used for stat cards and accordion header. */
-export function describeLatestMonthTrend(
+/** Compare the last two periods (months or years). */
+export function describeLatestPeriodTrend(
   counts: number[],
-  monthLabels: string[],
+  periodLabels: string[],
   itemLabel = "items",
+  priorPeriodLabel = "prior period",
 ): MonthTrendInsight | null {
-  if (counts.length < 2 || monthLabels.length !== counts.length) return null;
+  if (counts.length < 2 || periodLabels.length !== counts.length) return null;
 
   const i = counts.length - 1;
   const currentCount = counts[i] ?? 0;
   const previousCount = counts[i - 1] ?? 0;
-  const currentMonth = monthLabels[i] ?? "Latest";
-  const previousMonth = monthLabels[i - 1] ?? "prior month";
+  const currentMonth = periodLabels[i] ?? "Latest";
+  const previousMonth = periodLabels[i - 1] ?? priorPeriodLabel;
   const delta = currentCount - previousCount;
   const direction = trendDirection(delta);
 
@@ -92,6 +100,24 @@ export function describeLatestMonthTrend(
     previousMonth,
     summary,
   };
+}
+
+/** Compare the last two months — used for stat cards and accordion header. */
+export function describeLatestMonthTrend(
+  counts: number[],
+  monthLabels: string[],
+  itemLabel = "items",
+): MonthTrendInsight | null {
+  return describeLatestPeriodTrend(counts, monthLabels, itemLabel, "prior month");
+}
+
+/** Compare the last two years — used for repos/stars stat cards. */
+export function describeLatestYearTrend(
+  counts: number[],
+  yearLabels: string[],
+  itemLabel = "items",
+): MonthTrendInsight | null {
+  return describeLatestPeriodTrend(counts, yearLabels, itemLabel, "prior year");
 }
 
 /** @deprecated Use describeLatestMonthTrend for readable copy. */
