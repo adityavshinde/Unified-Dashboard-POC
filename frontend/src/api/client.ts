@@ -8,6 +8,7 @@ export interface Repository {
   stargazers_count: number;
   forks_count: number;
   open_issues_count: number;
+  open_pull_requests_count?: number;
   archived: boolean;
   updated_at?: string;
 }

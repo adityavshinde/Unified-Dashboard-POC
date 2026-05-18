@@ -23,6 +23,9 @@ function buildTheme(mode: ColorMode) {
     palette: {
       mode,
       primary: { main: mode === "light" ? "#1976d2" : "#90caf9" },
+      secondary: { main: mode === "light" ? "#7b1fa2" : "#ce93d8" },
+      warning: { main: mode === "light" ? "#ed6c02" : "#ffb74d" },
+      error: { main: mode === "light" ? "#d32f2f" : "#ef5350" },
       background: {
         default: mode === "light" ? "#f5f5f5" : "#121212",
         paper: mode === "light" ? "#ffffff" : "#1e1e1e",

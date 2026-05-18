@@ -4,6 +4,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import { useEffect, useState } from "react";
 import { fetchRepositories, type Repository } from "../api/client";
 import { DashboardLayout } from "./DashboardLayout";
+import { DashboardStats } from "./DashboardStats";
 import { Header } from "./Header";
 import { RepositoriesTable } from "./RepositoriesTable";
 
@@ -36,7 +37,8 @@ export function Dashboard() {
         <Box sx={{ flexShrink: 0, pb: 2 }}>
           <Header
             title="Repositories"
-            subtitle={`${org} — expand a row for donut, monthly trends, and item list`}
+            organization={org}
+            subtitle="Browse tektoncd projects, then expand a row for workload charts and tracked issues."
           />
           {reposError && <Alert severity="error">{reposError}</Alert>}
         </Box>
@@ -46,7 +48,10 @@ export function Dashboard() {
             <CircularProgress />
           </Box>
         ) : (
-          <RepositoriesTable repositories={repos} />
+          <>
+            <DashboardStats repositories={repos} organization={org} />
+            <RepositoriesTable repositories={repos} />
+          </>
         )}
       </Box>
     </DashboardLayout>

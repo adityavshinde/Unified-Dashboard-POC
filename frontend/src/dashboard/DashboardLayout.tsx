@@ -1,3 +1,4 @@
+import DashboardCustomizeOutlinedIcon from "@mui/icons-material/DashboardCustomizeOutlined";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Container from "@mui/material/Container";
@@ -17,7 +18,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <AppBar position="sticky" elevation={0} color="default" sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Toolbar>
-          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
+          <DashboardCustomizeOutlinedIcon color="primary" sx={{ mr: 1.25 }} />
+          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700, letterSpacing: -0.2 }}>
             Tekton Unified Dashboard
           </Typography>
           <ThemeToggle />

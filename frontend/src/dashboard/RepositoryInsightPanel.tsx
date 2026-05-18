@@ -1,4 +1,5 @@
 import CachedIcon from "@mui/icons-material/Cached";
+import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import Alert from "@mui/material/Alert";
@@ -16,7 +17,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { PieChart } from "@mui/x-charts/PieChart";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   fetchRepoInsights,
   type CategoryInsight,
@@ -52,9 +53,31 @@ type RepositoryInsightPanelProps = {
   repo: Repository;
   /** Increment to force refresh from GitHub (bypass server cache). */
   refreshTrigger: number;
+  onClose: () => void;
 };
 
-export function RepositoryInsightPanel({ repo, refreshTrigger }: RepositoryInsightPanelProps) {
+function PanelToolbar({
+  onClose,
+  children,
+}: {
+  onClose: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+        {children}
+      </Stack>
+      <Tooltip title="Collapse">
+        <IconButton size="small" aria-label="Collapse insights" onClick={onClose}>
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </Stack>
+  );
+}
+
+export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: RepositoryInsightPanelProps) {
   const [categories, setCategories] = useState<CategoryInsight[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>("good_first_issues");
   const [ready, setReady] = useState(false);
@@ -128,37 +151,86 @@ export function RepositoryInsightPanel({ repo, refreshTrigger }: RepositoryInsig
     [safeCategories],
   );
 
+  const hasInsightData = useMemo(() => pieData.some(d => d.value > 0), [pieData]);
+
+  const panelShellSx = {
+    p: 2,
+    bgcolor: "action.hover",
+    borderTop: 1,
+    borderColor: "divider",
+  } as const;
+
   if (!ready) {
-    if (showLoader) return <InsightsLoading />;
-    return <Box sx={{ minHeight: 16 }} />;
+    return (
+      <Box sx={panelShellSx}>
+        <PanelToolbar onClose={onClose}>
+          <Typography variant="subtitle2">Upstream insights</Typography>
+        </PanelToolbar>
+        {showLoader ? <InsightsLoading /> : <Box sx={{ minHeight: 16 }} />}
+      </Box>
+    );
   }
 
   if (error) {
-    return <Alert severity="error">{error}</Alert>;
+    return (
+      <Box sx={panelShellSx}>
+        <PanelToolbar onClose={onClose}>
+          <Typography variant="subtitle2">Upstream insights</Typography>
+        </PanelToolbar>
+        <Alert severity="error">{error}</Alert>
+      </Box>
+    );
   }
 
   if (safeCategories.length === 0 || !selected) {
-    return <Alert severity="info">No insight data for this repository.</Alert>;
+    return (
+      <Box sx={panelShellSx}>
+        <PanelToolbar onClose={onClose}>
+          <Typography variant="subtitle2">Upstream insights</Typography>
+        </PanelToolbar>
+        <Typography variant="body2" color="text.secondary">
+          No upstream tracking data is available for this repository.
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (!hasInsightData) {
+    return (
+      <Box sx={panelShellSx}>
+        <PanelToolbar onClose={onClose}>
+          <Typography variant="subtitle2">Upstream insights</Typography>
+          {fromCache && refreshTrigger === 0 && (
+            <Tooltip title="Loaded from server cache (up to 15 min old). Use Refresh for latest data.">
+              <Chip icon={<CachedIcon />} label="Cached" size="small" variant="outlined" />
+            </Tooltip>
+          )}
+        </PanelToolbar>
+        <Typography variant="body2" color="text.secondary">
+          Nothing to show yet — no open good-first issues, bugs, pull requests, or dependency alerts
+          were found for this repository.
+        </Typography>
+      </Box>
+    );
   }
 
   const months = selected.monthly.map(m => m.month);
   const monthLabels = months.map(formatMonthLabel);
   const monthRange = monthRangeLabel(months);
   const counts = selected.monthly.map(m => m.count);
+  const selectedBarColor = pieData.find(d => d.id === selectedKey)?.color ?? CHART_COLORS[0];
 
   return (
     <Fade in timeout={400}>
-      <Box sx={{ p: 2, bgcolor: "action.hover", borderTop: 1, borderColor: "divider" }}>
-        <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-            <Typography variant="subtitle2">Upstream insights</Typography>
-            {fromCache && refreshTrigger === 0 && (
-              <Tooltip title="Loaded from server cache (up to 15 min old). Use Refresh for latest data.">
-                <Chip icon={<CachedIcon />} label="Cached" size="small" variant="outlined" />
-              </Tooltip>
-            )}
-          </Stack>
-        </Stack>
+      <Box sx={panelShellSx}>
+        <PanelToolbar onClose={onClose}>
+          <Typography variant="subtitle2">Upstream insights</Typography>
+          {fromCache && refreshTrigger === 0 && (
+            <Tooltip title="Loaded from server cache (up to 15 min old). Use Refresh for latest data.">
+              <Chip icon={<CachedIcon />} label="Cached" size="small" variant="outlined" />
+            </Tooltip>
+          )}
+        </PanelToolbar>
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 4 }}>
             <Typography variant="subtitle2" gutterBottom>
@@ -196,7 +268,7 @@ export function RepositoryInsightPanel({ repo, refreshTrigger }: RepositoryInsig
             {months.length > 0 ? (
               <BarChart
                 xAxis={[{ scaleType: "band", data: monthLabels }]}
-                series={[{ data: counts, label: selected.label, color: CHART_COLORS[0] }]}
+                series={[{ data: counts, label: selected.label, color: selectedBarColor }]}
                 height={220}
                 margin={{ left: 40, right: 12, top: 12, bottom: 48 }}
               />

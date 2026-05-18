@@ -22,8 +22,9 @@ type Repository struct {
 	Language    string `json:"language,omitempty"`
 	Stars       int    `json:"stargazers_count"`
 	Forks       int    `json:"forks_count"`
-	OpenIssues  int    `json:"open_issues_count"`
-	Private     bool   `json:"private"`
+	OpenIssues        int `json:"open_issues_count"`
+	OpenPullRequests  int `json:"open_pull_requests_count"`
+	Private           bool   `json:"private"`
 	Archived    bool   `json:"archived"`
 	UpdatedAt   string `json:"updated_at,omitempty"`
 }
@@ -94,6 +95,25 @@ func (c *Client) ListOrgRepositories(ctx context.Context, org string) ([]Reposit
 		opts.Page = resp.NextPage
 	}
 	return out, nil
+}
+
+// FillOpenPullRequestCounts sets open_pull_requests_count on each repo (best-effort).
+func (c *Client) FillOpenPullRequestCounts(ctx context.Context, repos []Repository) {
+	for i := range repos {
+		parts := strings.SplitN(repos[i].FullName, "/", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		n, err := c.countOpenPRs(ctx, parts[0], parts[1])
+		if err == nil {
+			repos[i].OpenPullRequests = n
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(120 * time.Millisecond):
+		}
+	}
 }
 
 func mapRepository(r *gh.Repository) Repository {

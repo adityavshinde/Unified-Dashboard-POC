@@ -5,14 +5,17 @@ import "@fontsource/roboto/700.css";
 import { Dashboard } from "./dashboard/Dashboard";
 import { AiModeProvider } from "./theme/AiModeContext";
 import { ColorModeProvider } from "./theme/ColorModeContext";
+import { StatCardsPreferencesProvider } from "./theme/StatCardsPreferencesContext";
 import "./index.css";
 
 export function App() {
   return (
     <ColorModeProvider>
-      <AiModeProvider>
-        <Dashboard />
-      </AiModeProvider>
+      <StatCardsPreferencesProvider>
+        <AiModeProvider>
+          <Dashboard />
+        </AiModeProvider>
+      </StatCardsPreferencesProvider>
     </ColorModeProvider>
   );
 }

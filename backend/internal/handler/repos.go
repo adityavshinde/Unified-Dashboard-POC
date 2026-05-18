@@ -33,7 +33,7 @@ func (h *Handler) listOrgRepositories(w http.ResponseWriter, r *http.Request, or
 	key := "repos:" + org
 
 	resp, hit, err := getOrFetch(h, r, key, func() (repositoriesResponse, error) {
-		ctx, cancel := contextWithTimeout(r, 45*time.Second)
+		ctx, cancel := contextWithTimeout(r, 120*time.Second)
 		defer cancel()
 
 		repos, err := h.github.ListOrgRepositories(ctx, org)
@@ -43,6 +43,7 @@ func (h *Handler) listOrgRepositories(w http.ResponseWriter, r *http.Request, or
 		if repos == nil {
 			repos = []ghclient.Repository{}
 		}
+		h.github.FillOpenPullRequestCounts(ctx, repos)
 		return repositoriesResponse{
 			Organization: org,
 			Count:        len(repos),
