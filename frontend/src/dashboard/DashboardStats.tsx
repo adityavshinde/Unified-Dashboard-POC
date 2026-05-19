@@ -20,7 +20,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { alpha, useTheme, type Theme } from "@mui/material/styles";
 import { LineChart } from "@mui/x-charts/LineChart";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { Repository, TrendPoint } from "../api/client";
 import { useStatCardsPreferences } from "../theme/StatCardsPreferencesContext";
 import { buildYearlyTrendsFromRepos } from "./buildTrendsFromRepos";
@@ -32,6 +32,7 @@ import {
   type TrendDirection,
   type TrendMetricKey,
 } from "./statTrendUtils";
+import { StatTrendDetailDialog, type StatTrendDetailProps } from "./StatTrendDetailDialog";
 import { useAnimatedCount } from "./useAnimatedCount";
 
 type TrendGranularity = "month" | "year";
@@ -62,10 +63,15 @@ function statCardSx(theme: Theme, paletteKey: PaletteKey) {
   const color = theme.palette[paletteKey].main;
   return {
     height: "100%",
-    cursor: "default",
+    cursor: "pointer",
     userSelect: "none",
     borderColor: alpha(color, theme.palette.mode === "light" ? 0.28 : 0.4),
     background: theme.palette.background.paper,
+    transition: "box-shadow 0.2s, border-color 0.2s",
+    "&:hover": {
+      borderColor: color,
+      boxShadow: `0 4px 20px ${alpha(color, 0.18)}`,
+    },
   };
 }
 
@@ -250,10 +256,12 @@ function StatCard({
   chartPoints,
   granularity,
   trendsLoading,
+  onOpenDetail,
 }: StatDef & {
   chartPoints: TrendPoint[];
   granularity: TrendGranularity;
   trendsLoading: boolean;
+  onOpenDetail: (color: string) => void;
 }) {
   const theme = useTheme();
   const color = theme.palette[paletteKey].main;
@@ -265,7 +273,20 @@ function StatCard({
       : describeLatestMonthTrend(series, periodLabels, statTrendItemLabel(trendKey));
 
   return (
-    <Card variant="outlined" sx={t => statCardSx(t, paletteKey)}>
+    <Card
+      variant="outlined"
+      sx={t => statCardSx(t, paletteKey)}
+      onClick={() => onOpenDetail(color)}
+      onKeyDown={e => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenDetail(color);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={`${label}: ${value.toLocaleString()}. Click for trend details.`}
+    >
       <CardContent sx={{ py: 2, "&:last-child": { pb: 2 } }}>
         <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", mb: 1 }}>
           <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600 }}>
@@ -298,6 +319,8 @@ function openPullRequests(repo: Repository): number {
   return repo.open_pull_requests_count ?? 0;
 }
 
+type DetailState = Omit<StatTrendDetailProps, "open" | "onClose">;
+
 export function DashboardStats({
   repositories,
   organization,
@@ -306,6 +329,7 @@ export function DashboardStats({
   trendsWarning = null,
 }: DashboardStatsProps) {
   const { showStats, toggleShowStats } = useStatCardsPreferences();
+  const [detail, setDetail] = useState<DetailState | null>(null);
   const yearlyTrendPoints = useMemo(
     () => buildYearlyTrendsFromRepos(repositories),
     [repositories],
@@ -379,18 +403,51 @@ export function DashboardStats({
           </Alert>
         )}
         <Grid container spacing={2}>
-          {stats.map(stat => (
-            <Grid key={stat.label} size={{ xs: 12, sm: 6, md: 3 }}>
-              <StatCard
-                {...stat}
-                chartPoints={usesYearlyTrend(stat.trendKey) ? yearlyTrendPoints : trendPoints}
-                granularity={usesYearlyTrend(stat.trendKey) ? "year" : "month"}
-                trendsLoading={usesYearlyTrend(stat.trendKey) ? false : trendsLoading}
-              />
-            </Grid>
-          ))}
+          {stats.map(stat => {
+            const yearly = usesYearlyTrend(stat.trendKey);
+            const chartPoints = yearly ? yearlyTrendPoints : trendPoints;
+            return (
+              <Grid key={stat.label} size={{ xs: 12, sm: 6, md: 3 }}>
+                <StatCard
+                  {...stat}
+                  chartPoints={chartPoints}
+                  granularity={yearly ? "year" : "month"}
+                  trendsLoading={yearly ? false : trendsLoading}
+                  onOpenDetail={color =>
+                    setDetail({
+                      label: stat.label,
+                      icon: stat.icon,
+                      value: stat.value,
+                      color,
+                      trendKey: stat.trendKey,
+                      granularity: yearly ? "year" : "month",
+                      chartPoints,
+                      trendsLoading: yearly ? false : trendsLoading,
+                      organization,
+                    })
+                  }
+                />
+              </Grid>
+            );
+          })}
         </Grid>
       </Collapse>
+
+      {detail && (
+        <StatTrendDetailDialog
+          open
+          onClose={() => setDetail(null)}
+          label={detail.label}
+          icon={detail.icon}
+          value={detail.value}
+          color={detail.color}
+          trendKey={detail.trendKey}
+          granularity={detail.granularity}
+          chartPoints={detail.chartPoints}
+          trendsLoading={detail.trendsLoading}
+          organization={detail.organization}
+        />
+      )}
     </Box>
   );
 }

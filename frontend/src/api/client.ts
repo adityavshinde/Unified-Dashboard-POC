@@ -9,6 +9,11 @@ export interface Repository {
   forks_count: number;
   open_issues_count: number;
   open_pull_requests_count?: number;
+  stale_pull_requests_count?: number;
+  stale_issues_count?: number;
+  last_release_at?: string;
+  last_release_tag?: string;
+  last_release_url?: string;
   archived: boolean;
   created_at?: string;
   updated_at?: string;
@@ -37,6 +42,7 @@ export interface Issue {
   state: string;
   labels: string[];
   created_at?: string;
+  updated_at?: string;
   comments: number;
   complexity?: "beginner" | "intermediate" | "advanced";
 }
@@ -68,6 +74,13 @@ export interface PullRequestItem {
   title: string;
   html_url: string;
   created_at?: string;
+  updated_at?: string;
+}
+
+export interface LatestRelease {
+  tag: string;
+  published_at?: string;
+  url: string;
 }
 
 export interface CategoryInsight {
@@ -83,6 +96,7 @@ export interface RepoInsights {
   repository: string;
   metrics: TrackingMetrics;
   categories: CategoryInsight[];
+  latest_release?: LatestRelease | null;
 }
 
 interface RepositoriesResponse {

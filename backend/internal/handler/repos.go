@@ -33,7 +33,7 @@ func (h *Handler) listOrgRepositories(w http.ResponseWriter, r *http.Request, or
 	key := "repos:" + org
 
 	resp, hit, err := getOrFetch(h, r, key, func() (repositoriesResponse, error) {
-		ctx, cancel := contextWithTimeout(r, 120*time.Second)
+		ctx, cancel := contextWithTimeout(r, 180*time.Second)
 		defer cancel()
 
 		repos, err := h.github.ListOrgRepositories(ctx, org)
@@ -44,6 +44,9 @@ func (h *Handler) listOrgRepositories(w http.ResponseWriter, r *http.Request, or
 			repos = []ghclient.Repository{}
 		}
 		h.github.FillOpenPullRequestCounts(ctx, repos)
+		if err := h.github.EnrichRepositories(ctx, org, repos); err != nil {
+			h.log.Warn("graphql repo enrichment failed", "org", org, "error", err)
+		}
 		return repositoriesResponse{
 			Organization: org,
 			Count:        len(repos),

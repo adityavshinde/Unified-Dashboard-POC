@@ -5,7 +5,9 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import ScheduleIcon from "@mui/icons-material/Schedule";
 import StarIcon from "@mui/icons-material/Star";
+import Link from "@mui/material/Link";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -94,17 +96,28 @@ function languageAvatarSx(theme: Theme, language?: string) {
   };
 }
 
+const STALE_DAYS = 30;
+
+function formatReleaseDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 function MetricCell({
   icon,
   value,
   iconColor,
+  title,
 }: {
   icon: ReactNode;
   value: number;
   iconColor: string;
+  title?: string;
 }) {
   return (
-    <TableCell align="right">
+    <TableCell align="right" title={title}>
       <Box
         sx={{
           display: "inline-flex",
@@ -203,6 +216,23 @@ export function RepositoriesTable({ repositories }: RepositoriesTableProps) {
                   Issues
                 </Box>
               </TableCell>
+              <TableCell align="right" sx={{ ...tableHeadCellSx, whiteSpace: "nowrap" }}>
+                <Tooltip title={`Open PRs with no update for ${STALE_DAYS}+ days (GraphQL sample, up to 100 PRs)`}>
+                  <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, justifyContent: "flex-end" }}>
+                    <ScheduleIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+                    Stale PRs
+                  </Box>
+                </Tooltip>
+              </TableCell>
+              <TableCell align="right" sx={{ ...tableHeadCellSx, whiteSpace: "nowrap" }}>
+                <Tooltip title={`Open issues with no update for ${STALE_DAYS}+ days (GraphQL sample, up to 100 issues)`}>
+                  <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, justifyContent: "flex-end" }}>
+                    <ScheduleIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+                    Stale issues
+                  </Box>
+                </Tooltip>
+              </TableCell>
+              <TableCell sx={{ ...tableHeadCellSx, whiteSpace: "nowrap" }}>Last release</TableCell>
               <TableCell width={52} align="center" sx={tableHeadCellSx}>
                 <Tooltip title="Refresh fetches latest GitHub data and bypasses the 15-minute cache">
                   <RefreshIcon sx={{ fontSize: 18, color: "text.secondary" }} />
@@ -327,6 +357,43 @@ export function RepositoriesTable({ repositories }: RepositoriesTableProps) {
                       value={repo.open_issues_count}
                       iconColor="warning.main"
                     />
+                    <MetricCell
+                      icon={<CallMergeOutlinedIcon sx={{ fontSize: 17 }} />}
+                      value={repo.stale_pull_requests_count ?? 0}
+                      iconColor="text.secondary"
+                      title={`No PR activity for ${STALE_DAYS}+ days`}
+                    />
+                    <MetricCell
+                      icon={<BugReportOutlinedIcon sx={{ fontSize: 17 }} />}
+                      value={repo.stale_issues_count ?? 0}
+                      iconColor="text.secondary"
+                      title={`No issue activity for ${STALE_DAYS}+ days`}
+                    />
+                    <TableCell>
+                      {repo.last_release_url && repo.last_release_tag ? (
+                        <Box sx={{ minWidth: 0 }}>
+                          <Link
+                            href={repo.last_release_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            variant="body2"
+                            sx={{ fontWeight: 600 }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            {repo.last_release_tag}
+                          </Link>
+                          {repo.last_release_at && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                              {formatReleaseDate(repo.last_release_at)}
+                            </Typography>
+                          )}
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" color="text.disabled">
+                          —
+                        </Typography>
+                      )}
+                    </TableCell>
                     <TableCell align="center" onClick={e => e.stopPropagation()}>
                       <Tooltip title="Refresh insights from GitHub (bypasses cache)">
                         <IconButton
@@ -340,7 +407,7 @@ export function RepositoriesTable({ repositories }: RepositoriesTableProps) {
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell colSpan={8} sx={{ p: 0, borderBottom: open ? undefined : 0 }}>
+                    <TableCell colSpan={11} sx={{ p: 0, borderBottom: open ? undefined : 0 }}>
                       <Collapse
                         in={open}
                         timeout="auto"

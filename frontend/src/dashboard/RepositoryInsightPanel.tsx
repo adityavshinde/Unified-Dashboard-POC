@@ -1,9 +1,10 @@
 import CachedIcon from "@mui/icons-material/Cached";
 import CloseIcon from "@mui/icons-material/Close";
+import FilterAltOffIcon from "@mui/icons-material/FilterAltOff";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Fade from "@mui/material/Fade";
 import Grid from "@mui/material/Grid";
@@ -22,6 +23,7 @@ import {
   fetchRepoInsights,
   type CategoryInsight,
   type Issue,
+  type LatestRelease,
   type PullRequestItem,
   type Repository,
 } from "../api/client";
@@ -30,8 +32,17 @@ import { InsightsLoading } from "./InsightsLoading";
 import { describeLatestMonthTrend } from "./statTrendUtils";
 import { TrendInsightBanner } from "./TrendInsightBanner";
 
-const CHART_COLORS = ["#1976d2", "#d32f2f", "#ed6c02", "#2e7d32", "#9c27b0"];
+const CHART_COLORS = [
+  "#1976d2",
+  "#d32f2f",
+  "#ed6c02",
+  "#2e7d32",
+  "#9c27b0",
+  "#00838f",
+  "#6d4c41",
+];
 const LOADING_DELAY_MS = 150;
+const STALE_DAYS = 30;
 
 /** Backend sends months as `YYYY-MM` (UTC). */
 function formatMonthLabel(yearMonth: string): string {
@@ -45,9 +56,24 @@ function formatMonthLabel(yearMonth: string): string {
   });
 }
 
+function formatReleaseDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function createdYearMonth(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function trendItemLabel(categoryKey: string): string {
-  if (categoryKey === "pending_prs") return "pull requests opened";
+  if (categoryKey === "pending_prs" || categoryKey === "stale_prs") return "pull requests opened";
   if (categoryKey === "dependency_alerts") return "alerts";
+  if (categoryKey === "stale_issues") return "stale issues opened";
   return "issues opened";
 }
 
@@ -56,6 +82,28 @@ function monthRangeLabel(months: string[]): string | null {
   const first = formatMonthLabel(months[0]!);
   const last = formatMonthLabel(months[months.length - 1]!);
   return first === last ? first : `${first} – ${last}`;
+}
+
+function isPrCategory(key: string): boolean {
+  return key === "pending_prs" || key === "stale_prs";
+}
+
+function filterCategoryByMonth(category: CategoryInsight, month: string | null): CategoryInsight {
+  if (!month) return category;
+
+  if (category.pull_requests?.length) {
+    const pull_requests = category.pull_requests.filter(
+      pr => createdYearMonth(pr.created_at) === month,
+    );
+    return { ...category, pull_requests, total: pull_requests.length };
+  }
+
+  if (category.issues?.length) {
+    const issues = category.issues.filter(issue => createdYearMonth(issue.created_at) === month);
+    return { ...category, issues, total: issues.length };
+  }
+
+  return category;
 }
 
 type RepositoryInsightPanelProps = {
@@ -89,21 +137,34 @@ function PanelToolbar({
 export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: RepositoryInsightPanelProps) {
   const { aiMode } = useAiMode();
   const [categories, setCategories] = useState<CategoryInsight[]>([]);
+  const [latestRelease, setLatestRelease] = useState<LatestRelease | null>(null);
   const [selectedKey, setSelectedKey] = useState<string>("good_first_issues");
+  const [monthFilter, setMonthFilter] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [showLoader, setShowLoader] = useState(false);
   const [fromCache, setFromCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const applyInsights = useCallback((data: Awaited<ReturnType<typeof fetchRepoInsights>>["data"]) => {
-    const list = Array.isArray(data.categories) ? data.categories : [];
-    setCategories(list);
-    const first = list.find(c => c.total > 0)?.key ?? list[0]?.key ?? "good_first_issues";
-    setSelectedKey(first);
+  const defaultCategoryKey = useCallback((list: CategoryInsight[]) => {
+    return list.find(c => c.total > 0)?.key ?? list[0]?.key ?? "good_first_issues";
   }, []);
 
+  const applyInsights = useCallback(
+    (data: Awaited<ReturnType<typeof fetchRepoInsights>>["data"]) => {
+      const list = Array.isArray(data.categories) ? data.categories : [];
+      setCategories(list);
+      setLatestRelease(data.latest_release ?? null);
+      setSelectedKey(defaultCategoryKey(list));
+      setMonthFilter(null);
+    },
+    [defaultCategoryKey],
+  );
+
   useEffect(() => {
-    const [owner, name] = repo.full_name.split("/");
+    const parts = repo.full_name.split("/");
+    const owner = parts[0];
+    const name = parts[1];
+    if (!owner || !name) return;
     let cancelled = false;
     const forceRefresh = refreshTrigger > 0;
 
@@ -111,6 +172,8 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
     setFromCache(false);
     setReady(false);
     setCategories([]);
+    setLatestRelease(null);
+    setMonthFilter(null);
     setShowLoader(forceRefresh);
 
     let loadingTimer: ReturnType<typeof setTimeout> | undefined;
@@ -150,6 +213,11 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
     [safeCategories, selectedKey],
   );
 
+  const filteredSelected = useMemo(
+    () => (selected ? filterCategoryByMonth(selected, monthFilter) : undefined),
+    [selected, monthFilter],
+  );
+
   const pieData = useMemo(
     () =>
       safeCategories.map((c, i) => ({
@@ -161,7 +229,22 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
     [safeCategories],
   );
 
-  const hasInsightData = useMemo(() => pieData.some(d => d.value > 0), [pieData]);
+  const hasInsightData = useMemo(
+    () => pieData.some(d => d.value > 0) || Boolean(latestRelease?.url),
+    [pieData, latestRelease],
+  );
+
+  const hasActiveFilters = monthFilter !== null;
+
+  const resetAllFilters = () => {
+    setMonthFilter(null);
+    setSelectedKey(defaultCategoryKey(safeCategories));
+  };
+
+  const selectCategory = (key: string) => {
+    setSelectedKey(key);
+    setMonthFilter(null);
+  };
 
   const panelShellSx = {
     p: 2,
@@ -192,7 +275,7 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
     );
   }
 
-  if (safeCategories.length === 0 || !selected) {
+  if (safeCategories.length === 0 || !selected || !filteredSelected) {
     return (
       <Box sx={panelShellSx}>
         <PanelToolbar onClose={onClose}>
@@ -217,8 +300,8 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
           )}
         </PanelToolbar>
         <Typography variant="body2" color="text.secondary">
-          Nothing to show yet — no open good-first issues, bugs, pull requests, or dependency alerts
-          were found for this repository.
+          Nothing to show yet — no open good-first issues, bugs, pull requests, stale items, or
+          dependency alerts were found for this repository.
         </Typography>
       </Box>
     );
@@ -232,6 +315,11 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
   const selectedBarColor =
     pieData.find(d => d.id === selectedKey)?.color ?? CHART_COLORS[0] ?? "#1976d2";
 
+  const listCount = filteredSelected.total;
+  const listTitle = monthFilter
+    ? `${selected.label} in ${formatMonthLabel(monthFilter)} (${listCount})`
+    : `${selected.label} (${listCount})`;
+
   return (
     <Fade in timeout={400}>
       <Box sx={panelShellSx}>
@@ -242,7 +330,50 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
               <Chip icon={<CachedIcon />} label="Cached" size="small" variant="outlined" />
             </Tooltip>
           )}
+          {latestRelease?.url && (
+            <Chip
+              component="a"
+              href={latestRelease.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              clickable
+              size="small"
+              variant="outlined"
+              label={
+                latestRelease.published_at
+                  ? `Release ${latestRelease.tag} · ${formatReleaseDate(latestRelease.published_at)}`
+                  : `Release ${latestRelease.tag}`
+              }
+              onClick={e => e.stopPropagation()}
+            />
+          )}
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<FilterAltOffIcon />}
+            disabled={!hasActiveFilters}
+            onClick={e => {
+              e.stopPropagation();
+              resetAllFilters();
+            }}
+          >
+            Reset filters
+          </Button>
         </PanelToolbar>
+
+        {hasActiveFilters && (
+          <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: "wrap" }}>
+            {monthFilter && (
+              <Chip
+                size="small"
+                label={`Month: ${formatMonthLabel(monthFilter)}`}
+                onDelete={() => setMonthFilter(null)}
+              />
+            )}
+            <Chip size="small" color="primary" variant="outlined" label={selected.label} />
+          </Stack>
+        )}
+
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 4 }}>
             <Typography variant="subtitle2" gutterBottom>
@@ -251,7 +382,7 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
             <PieChart
               series={[
                 {
-                  data: pieData,
+                  data: pieData.filter(d => d.value > 0),
                   innerRadius: 50,
                   outerRadius: 90,
                   paddingAngle: 2,
@@ -262,11 +393,18 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
               ]}
               height={220}
               onItemClick={(_e, item) => {
-                if (item?.dataIndex != null && pieData[item.dataIndex]) {
-                  setSelectedKey(String(pieData[item.dataIndex].id));
+                const slice = pieData.filter(d => d.value > 0);
+                const entry = item?.dataIndex != null ? slice[item.dataIndex] : undefined;
+                if (entry) {
+                  selectCategory(String(entry.id));
                 }
               }}
             />
+            {(selectedKey === "stale_prs" || selectedKey === "stale_issues") && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                Stale = no GitHub activity for {STALE_DAYS}+ days
+              </Typography>
+            )}
           </Grid>
           <Grid size={{ xs: 12, md: 8 }}>
             <Typography variant="subtitle2" gutterBottom>
@@ -274,7 +412,7 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
             </Typography>
             {monthRange && (
               <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                {monthRange} · by GitHub creation date (open items only)
+                {monthRange} · by creation date · click a bar to filter the list below
               </Typography>
             )}
             {monthTrend && <TrendInsightBanner insight={monthTrend} color={selectedBarColor} />}
@@ -293,10 +431,15 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
                   ]}
                   height={220}
                   margin={{ left: 40, right: 12, top: 20, bottom: 48 }}
+                  onItemClick={(_e, item) => {
+                    if (item?.dataIndex != null && months[item.dataIndex]) {
+                      setMonthFilter(months[item.dataIndex]!);
+                    }
+                  }}
                 />
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                  Each bar is how many were opened that month. Numbers on bars are counts. Compare
-                  heights month to month — the banner above explains the latest change.
+                  Each bar is how many were opened that month. Click a bar to filter the list, or use
+                  Reset filters to show all months.
                 </Typography>
               </>
             ) : (
@@ -307,10 +450,10 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
           </Grid>
           <Grid size={{ xs: 12 }}>
             <Typography variant="subtitle2" gutterBottom>
-              {selected.label} ({selected.total})
+              {listTitle}
             </Typography>
             <List dense disablePadding sx={{ maxHeight: 200, overflow: "auto" }}>
-              <CategoryItemList category={selected} />
+              <CategoryItemList category={filteredSelected} />
             </List>
           </Grid>
         </Grid>
@@ -343,9 +486,13 @@ function ComplexityChip({ complexity }: { complexity?: string }) {
 }
 
 function CategoryItemList({ category }: { category: CategoryInsight }) {
-  if (category.key === "pending_prs") {
+  if (isPrCategory(category.key)) {
     if (!category.pull_requests?.length) {
-      return <Typography variant="body2" color="text.secondary">No items.</Typography>;
+      return (
+        <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+          No items match the current filters.
+        </Typography>
+      );
     }
     return (
       <>
@@ -381,14 +528,18 @@ function CategoryItemList({ category }: { category: CategoryInsight }) {
 
   if (category.key === "dependency_alerts") {
     return (
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
         {category.total} open Dependabot alert(s). Enable GITHUB_TOKEN for alert details.
       </Typography>
     );
   }
 
   if (!category.issues?.length) {
-    return <Typography variant="body2" color="text.secondary">No items.</Typography>;
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+        No items match the current filters.
+      </Typography>
+    );
   }
 
   return (
