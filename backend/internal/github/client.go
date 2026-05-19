@@ -24,10 +24,8 @@ type Repository struct {
 	Stars       int    `json:"stargazers_count"`
 	Forks       int    `json:"forks_count"`
 	OpenIssues        int `json:"open_issues_count"`
-	OpenPullRequests     int    `json:"open_pull_requests_count"`
-	StalePullRequests    int    `json:"stale_pull_requests_count"`
-	StaleIssues          int    `json:"stale_issues_count"`
-	LastReleaseAt        string `json:"last_release_at,omitempty"`
+	OpenPullRequests int    `json:"open_pull_requests_count"`
+	LastReleaseAt    string `json:"last_release_at,omitempty"`
 	LastReleaseTag       string `json:"last_release_tag,omitempty"`
 	LastReleaseURL       string `json:"last_release_url,omitempty"`
 	Private              bool   `json:"private"`

@@ -8,9 +8,9 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
-// EnrichRepositories fills stale PR/issue counts and latest release via GitHub GraphQL.
-// Best-effort: logs and returns nil on failure so REST repo list still works.
-func (c *Client) EnrichRepositories(ctx context.Context, org string, repos []Repository) error {
+// EnrichRepositoryReleases fills latest release (and open PR total when REST missed it) via GraphQL.
+// Stale counts are loaded per repo from /insights when the accordion opens.
+func (c *Client) EnrichRepositoryReleases(ctx context.Context, org string, repos []Repository) error {
 	if c.gql == nil || len(repos) == 0 {
 		return nil
 	}
@@ -20,7 +20,6 @@ func (c *Client) EnrichRepositories(ctx context.Context, org string, repos []Rep
 		byName[repos[i].Name] = &repos[i]
 	}
 
-	staleCutoff := time.Now().UTC().AddDate(0, 0, -StaleActivityDays)
 	var cursor *githubv4.String
 
 	for {
@@ -29,8 +28,9 @@ func (c *Client) EnrichRepositories(ctx context.Context, org string, repos []Rep
 				Repositories struct {
 					Nodes []struct {
 						Name          string
-						PullRequests  pullRequestConnection `graphql:"pullRequests(states: OPEN, first: 100, orderBy: {field: UPDATED_AT, direction: ASC})"`
-						Issues        issueConnection       `graphql:"issues(states: OPEN, first: 100, orderBy: {field: UPDATED_AT, direction: ASC})"`
+						PullRequests  struct {
+							TotalCount int
+						} `graphql:"pullRequests(states: OPEN)"`
 						LatestRelease *struct {
 							PublishedAt githubv4.DateTime
 							TagName     string
@@ -58,8 +58,6 @@ func (c *Client) EnrichRepositories(ctx context.Context, org string, repos []Rep
 			if !ok {
 				continue
 			}
-			repo.StalePullRequests = countStale(node.PullRequests.Nodes, staleCutoff)
-			repo.StaleIssues = countStale(node.Issues.Nodes, staleCutoff)
 			if node.LatestRelease != nil && !node.LatestRelease.PublishedAt.IsZero() {
 				repo.LastReleaseAt = node.LatestRelease.PublishedAt.Format(time.RFC3339)
 				repo.LastReleaseTag = node.LatestRelease.TagName
@@ -77,30 +75,4 @@ func (c *Client) EnrichRepositories(ctx context.Context, org string, repos []Rep
 	}
 
 	return nil
-}
-
-type pullRequestConnection struct {
-	TotalCount int
-	Nodes      []struct {
-		UpdatedAt githubv4.DateTime
-	}
-}
-
-type issueConnection struct {
-	TotalCount int
-	Nodes      []struct {
-		UpdatedAt githubv4.DateTime
-	}
-}
-
-func countStale(nodes []struct {
-	UpdatedAt githubv4.DateTime
-}, cutoff time.Time) int {
-	n := 0
-	for _, node := range nodes {
-		if node.UpdatedAt.Time.Before(cutoff) {
-			n++
-		}
-	}
-	return n
 }

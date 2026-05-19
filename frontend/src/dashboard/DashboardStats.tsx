@@ -11,6 +11,7 @@ import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
 import Collapse from "@mui/material/Collapse";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
@@ -45,7 +46,9 @@ type DashboardStatsProps = {
   repositories: Repository[];
   organization: string;
   trendPoints?: TrendPoint[];
-  trendsLoading?: boolean;
+  /** Repo list still loading — headline values and yearly charts. */
+  reposPending?: boolean;
+  trendsPending?: boolean;
   trendsWarning?: string | null;
 };
 
@@ -134,14 +137,14 @@ function StatTrendChart({
   data,
   monthLabels,
   color,
-  loading,
+  isPending,
 }: {
   data: number[];
   monthLabels: string[];
   color: string;
-  loading: boolean;
+  isPending: boolean;
 }) {
-  if (loading) {
+  if (isPending) {
     return <Skeleton variant="rounded" height={CHART_HEIGHT} sx={{ mt: 1.5, borderRadius: 1.5 }} />;
   }
 
@@ -212,15 +215,15 @@ function StatTrendBadge({
   direction,
   label,
   summary,
-  loading,
+  isPending,
 }: {
   direction: TrendDirection;
   label: string;
   summary: string;
-  loading: boolean;
+  isPending: boolean;
 }) {
   const theme = useTheme();
-  if (loading) {
+  if (isPending) {
     return <Skeleton width={72} height={24} sx={{ mt: 0.75 }} />;
   }
 
@@ -255,12 +258,16 @@ function StatCard({
   trendKey,
   chartPoints,
   granularity,
-  trendsLoading,
+  valuePending,
+  chartPending,
+  trendsPending,
   onOpenDetail,
 }: StatDef & {
   chartPoints: TrendPoint[];
   granularity: TrendGranularity;
-  trendsLoading: boolean;
+  valuePending: boolean;
+  chartPending: boolean;
+  trendsPending: boolean;
   onOpenDetail: (color: string) => void;
 }) {
   const theme = useTheme();
@@ -295,21 +302,30 @@ function StatCard({
           <Box sx={{ color, display: "flex", opacity: 0.9 }}>{icon}</Box>
         </Stack>
 
-        <Stack direction="row" sx={{ alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
-          <AnimatedStatValue value={value} />
-          {trendInsight ? (
+        <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexWrap: "wrap", minHeight: 40 }}>
+          {valuePending ? (
+            <CircularProgress size={28} sx={{ color }} />
+          ) : (
+            <AnimatedStatValue value={value} />
+          )}
+          {!valuePending && trendInsight ? (
             <StatTrendBadge
               direction={trendInsight.direction}
               label={trendInsight.label}
               summary={trendInsight.summary}
-              loading={trendsLoading}
+              isPending={trendsPending}
             />
-          ) : trendsLoading ? (
+          ) : !valuePending && trendsPending ? (
             <Skeleton width={72} height={24} />
           ) : null}
         </Stack>
 
-        <StatTrendChart data={series} monthLabels={periodLabels} color={color} loading={trendsLoading} />
+        <StatTrendChart
+          data={series}
+          monthLabels={periodLabels}
+          color={color}
+          isPending={chartPending}
+        />
       </CardContent>
     </Card>
   );
@@ -325,7 +341,8 @@ export function DashboardStats({
   repositories,
   organization,
   trendPoints = [],
-  trendsLoading = false,
+  reposPending = false,
+  trendsPending = false,
   trendsWarning = null,
 }: DashboardStatsProps) {
   const { showStats, toggleShowStats } = useStatCardsPreferences();
@@ -412,7 +429,9 @@ export function DashboardStats({
                   {...stat}
                   chartPoints={chartPoints}
                   granularity={yearly ? "year" : "month"}
-                  trendsLoading={yearly ? false : trendsLoading}
+                  valuePending={reposPending}
+                  chartPending={yearly ? reposPending : trendsPending}
+                  trendsPending={yearly ? reposPending : trendsPending}
                   onOpenDetail={color =>
                     setDetail({
                       label: stat.label,
@@ -422,7 +441,7 @@ export function DashboardStats({
                       trendKey: stat.trendKey,
                       granularity: yearly ? "year" : "month",
                       chartPoints,
-                      trendsLoading: yearly ? false : trendsLoading,
+                      trendsPending: yearly ? reposPending : trendsPending,
                       organization,
                     })
                   }
@@ -444,7 +463,7 @@ export function DashboardStats({
           trendKey={detail.trendKey}
           granularity={detail.granularity}
           chartPoints={detail.chartPoints}
-          trendsLoading={detail.trendsLoading}
+          trendsPending={detail.trendsPending}
           organization={detail.organization}
         />
       )}

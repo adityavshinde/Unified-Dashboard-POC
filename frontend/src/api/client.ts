@@ -9,8 +9,6 @@ export interface Repository {
   forks_count: number;
   open_issues_count: number;
   open_pull_requests_count?: number;
-  stale_pull_requests_count?: number;
-  stale_issues_count?: number;
   last_release_at?: string;
   last_release_tag?: string;
   last_release_url?: string;

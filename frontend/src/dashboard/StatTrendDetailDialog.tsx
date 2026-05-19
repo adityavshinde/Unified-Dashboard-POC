@@ -73,7 +73,7 @@ export type StatTrendDetailProps = {
   trendKey: TrendMetricKey;
   granularity: TrendGranularity;
   chartPoints: TrendPoint[];
-  trendsLoading: boolean;
+  trendsPending: boolean;
   organization: string;
 };
 
@@ -87,7 +87,7 @@ export function StatTrendDetailDialog({
   trendKey,
   granularity,
   chartPoints,
-  trendsLoading,
+  trendsPending,
   organization,
 }: StatTrendDetailProps) {
   const theme = useTheme();
@@ -188,7 +188,7 @@ export function StatTrendDetailDialog({
             </Box>
           </Stack>
 
-          {trendsLoading ? (
+          {trendsPending ? (
             <Skeleton variant="rounded" height={chartHeight} />
           ) : hasActivity ? (
             <Box
