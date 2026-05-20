@@ -168,6 +168,8 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
     }
   }, [insightsQuery.data?.selectedKey]);
 
+  const effectiveComplexityFilter = aiMode ? complexityFilter : null;
+
   const defaultCategoryKey = (list: CategoryInsight[]) =>
     list.find(c => c.total > 0)?.key ?? list[0]?.key ?? "good_first_issues";
 
@@ -185,9 +187,9 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
 
   const filteredIssues = useMemo(() => {
     if (!selected?.issues) return [];
-    if (!complexityFilter) return selected.issues;
-    return selected.issues.filter(i => i.complexity === complexityFilter);
-  }, [selected, complexityFilter]);
+    if (!effectiveComplexityFilter) return selected.issues;
+    return selected.issues.filter(i => i.complexity === effectiveComplexityFilter);
+  }, [selected, effectiveComplexityFilter]);
 
   const pieData = useMemo(
     () =>
@@ -459,20 +461,20 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
         <Box>
           <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1, flexWrap: "wrap" }}>
               <Typography variant="subtitle2">
-                {selected.label} ({complexityFilter ? filteredIssues.length : selected.total})
+                {selected.label} ({effectiveComplexityFilter ? filteredIssues.length : selected.total})
               </Typography>
               {aiMode && hasIssueCategory && (
                 <>
                   <Chip
                     label="All"
                     size="small"
-                    variant={complexityFilter === null ? "filled" : "outlined"}
+                    variant={effectiveComplexityFilter === null ? "filled" : "outlined"}
                     onClick={() => setComplexityFilter(null)}
-                    sx={{ fontWeight: complexityFilter === null ? 700 : 400 }}
+                    sx={{ fontWeight: effectiveComplexityFilter === null ? 700 : 400 }}
                   />
                   {ALL_COMPLEXITY_LEVELS.map(level => {
                     const cfg = COMPLEXITY_CONFIG[level]!;
-                    const active = complexityFilter === level;
+                    const active = effectiveComplexityFilter === level;
                     return (
                       <Chip
                         key={level}
@@ -488,7 +490,7 @@ export function RepositoryInsightPanel({ repo, refreshTrigger, onClose }: Reposi
                 </>
               )}
             </Stack>
-          <CategoryItemList category={filteredSelected} filteredIssues={complexityFilter ? filteredIssues : undefined}/>
+          <CategoryItemList category={filteredSelected} filteredIssues={effectiveComplexityFilter ? filteredIssues : undefined}/>
         </Box>
       </Box>
     </Fade>
